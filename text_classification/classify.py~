@@ -1,0 +1,75 @@
+# -*- coding: UTF-8 -*-
+import tensorflow as tf
+import numpy as np
+from tensorflow.python.ops import rnn, rnn_cell
+from utils import get_data,one_hot
+
+
+# Parameters
+learning_rate = 0.1
+embed_size = 180
+hidden_size=300
+class_size=24#最终标签24个类
+len_voca=8000
+training_epochs=2000
+# Training Data
+train_x=[]
+train_y=[]
+train_x,train_y=get_data()
+length=len(train_x)
+
+
+# tf Graph Input
+input_placeholder=tf.placeholder(tf.int32,[None,])
+labels_placeholder= tf.placeholder(tf.float32,[1,class_size])
+
+# Create Model
+lstm_fw_cell=rnn_cell.BasicLSTMCell(hidden_size,forget_bias=1.0)
+lstm_bw_cell=rnn_cell.BasicLSTMCell(hidden_size,forget_bias=1.0)
+L = tf.get_variable("Embedding", (len_voca, embed_size))
+inputs=[]
+
+tensors = tf.nn.embedding_lookup(L, input_placeholder)
+print tensors.get_shape()
+#tensors=tf.transpose(tensors, [1, 0])
+
+#tensors=tf.reshape(tensors,[-1,embed_size])
+
+#此处有问题，如何将图结构修改成动态的
+inputs = tf.split(0,7,tensors)
+outputs = rnn.bidirectional_rnn(lstm_fw_cell, lstm_bw_cell, inputs, dtype=tf.float32)
+U=tf.get_variable("U",(hidden_size*2,class_size))
+b=tf.get_variable("b",(1,class_size))
+pred = tf.matmul(outputs[-1],U)+b#为什么是-1
+pred=tf.reduce_mean(pred,0)
+pred=tf.reshape(pred,[-1,class_size])
+
+#print pred.get_shape(),labels_placeholder.get_shape()
+
+cross_entropy=tf.nn.softmax_cross_entropy_with_logits(pred,labels_placeholder)
+cost=tf.reduce_mean(cross_entropy)
+optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate).minimize(cost)
+correct_pred=tf.equal(tf.argmax(pred,1),tf.argmax(labels_placeholder,1))
+accuracy=tf.reduce_mean(tf.cast(correct_pred,tf.float32))
+init=tf.initialize_all_variables()
+
+
+
+
+
+
+#对整个进行循环
+with tf.Session() as session:
+  session.run(init)
+  for i in range(training_epochs):
+    for j in range(length):
+      x=train_x[j]
+      y=train_y[j]
+      y=one_hot(y,depth=class_size)
+      print x,y
+      session.run(optimizer,feed_dict={input_placeholder:x,labels_placeholder:y})
+      acc=session.run(accuracy,feed_dict={input_placeholder:x,labels_placeholder:y})
+      cos=session.run(cost,feed_dict={input_placeholder:x,labels_placeholder:y})
+      print i,j,acc,cost
+
+
